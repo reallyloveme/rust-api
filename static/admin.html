@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>转发平台管理台</title>
+  <style>
+    :root {
+      --bg: #0f1419; --panel: #1a2332; --border: #2d3a4f; --text: #e7ecf3;
+      --muted: #8b9bb4; --accent: #3d8bfd; --accent-hover: #5a9dff;
+      --danger: #e35d6a; --ok: #3ecf8e;
+      --mono: "Cascadia Code", Consolas, monospace;
+      --sans: "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: var(--sans); background: var(--bg); color: var(--text); line-height: 1.5; }
+    header {
+      padding: 0.85rem 0.75rem; border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: center;
+    }
+    header h1 { margin: 0; font-size: 1.1rem; }
+    header p { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.85rem; }
+    .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    main { max-width: none; margin: 0; padding: 0.75rem; display: grid; gap: 1rem; }
+    section {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+      padding: 0.85rem 0.9rem 1rem;
+    }
+    section h2 {
+      margin: 0 0 0.85rem; font-size: 0.8rem; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    button {
+      font: inherit; cursor: pointer; border: 1px solid var(--border); background: #243044;
+      color: var(--text); padding: 0.35rem 0.75rem; border-radius: 6px;
+    }
+    button:hover { background: #2c3a52; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+    select, input, textarea {
+      font: inherit; font-family: var(--mono); font-size: 0.85rem; background: var(--bg);
+      border: 1px solid var(--border); color: var(--text); border-radius: 4px; padding: 0.35rem 0.5rem;
+    }
+    select { font-family: var(--sans); min-width: 140px; }
+    textarea { min-height: 56px; resize: vertical; width: 100%; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.85rem; }
+    .tab {
+      border-radius: 6px 6px 0 0; border-bottom: 2px solid transparent; padding: 0.45rem 0.9rem;
+      background: transparent;
+    }
+    .tab.active { border-bottom-color: var(--accent); color: var(--accent); background: rgba(61,139,253,0.08); }
+    .row { display: flex; flex-wrap: wrap; gap: 0.65rem; align-items: flex-end; }
+    .field { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.75rem; color: var(--muted); }
+    .rule {
+      border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.65rem; display: grid; gap: 0.5rem;
+    }
+    .rule-head { display: flex; justify-content: space-between; align-items: center; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.5rem; }
+    .check { flex-direction: row; align-items: center; gap: 0.35rem; margin-top: 1.2rem; }
+    .check input { width: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; font-family: var(--mono); table-layout: fixed; }
+    th, td { text-align: left; padding: 0.35rem 0.4rem; border-bottom: 1px solid var(--border); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    th { color: var(--muted); font-weight: 500; font-family: var(--sans); }
+    .col-expand { width: 2.2rem; text-align: center; }
+    .col-time { width: 9.5rem; }
+    .col-origin { width: 11rem; }
+    .col-env { width: 4rem; }
+    .col-method { width: 3.6rem; }
+    .col-path { width: 22%; }
+    .col-rule { width: 7rem; }
+    .col-status { width: 3.2rem; }
+    .col-ms { width: 4rem; }
+    .col-target { width: auto; }
+    .status-ok { color: var(--ok); } .status-err { color: var(--danger); }
+    .empty { color: var(--muted); font-size: 0.9rem; }
+    .expand-btn {
+      border: none; background: transparent; color: var(--muted); cursor: pointer;
+      width: 1.55rem; height: 1.55rem; padding: 0; border-radius: 4px;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: transform .15s ease, color .15s ease, background .15s ease;
+      font-size: 0.7rem; line-height: 1;
+    }
+    .expand-btn:hover { color: var(--text); background: #243044; }
+    .expand-btn.open { transform: rotate(90deg); color: var(--accent); }
+    tr.log-row:hover { background: rgba(61,139,253,0.04); }
+    tr.log-detail { display: none; }
+    tr.log-detail.show { display: table-row; }
+    tr.log-detail > td {
+      white-space: normal; overflow: visible; text-overflow: unset; vertical-align: top;
+      background: #141c28; padding: 0.7rem 0.85rem 0.85rem 2.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .detail-grid { display: grid; gap: 0.55rem; max-width: 1100px; }
+    .detail-item {
+      display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) auto;
+      gap: 0.45rem; align-items: start;
+    }
+    .detail-label {
+      color: var(--muted); font-family: var(--sans); font-size: 0.78rem; padding-top: 0.2rem;
+    }
+    .detail-value {
+      margin: 0; font-family: var(--mono); font-size: 0.8rem; line-height: 1.45;
+      white-space: pre-wrap; word-break: break-word;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+      padding: 0.4rem 0.5rem; max-height: 240px; overflow: auto;
+    }
+    .detail-value.plain {
+      background: transparent; border: none; padding: 0.2rem 0; max-height: none;
+    }
+    .detail-copy { font-size: 0.75rem; padding: 0.2rem 0.45rem; white-space: nowrap; }
+    .modal-mask {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 100;
+      display: none; align-items: center; justify-content: center; padding: 1.5rem;
+    }
+    .modal-mask.show { display: flex; }
+    .modal {
+      width: min(720px, 100%); max-height: min(80vh, 720px);
+      background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .modal-head {
+      display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
+      padding: 0.85rem 1rem; border-bottom: 1px solid var(--border);
+    }
+    .modal-head h3 { margin: 0; font-size: 0.95rem; }
+    .modal-meta { color: var(--muted); font-size: 0.8rem; margin-top: 0.2rem; }
+    .modal-body {
+      padding: 1rem; overflow: auto; flex: 1;
+      font-family: var(--mono); font-size: 0.85rem; white-space: pre-wrap; word-break: break-word;
+      line-height: 1.45; background: var(--bg);
+    }
+    .modal-actions { display: flex; gap: 0.5rem; }
+    #toast {
+      position: fixed; bottom: 1.2rem; right: 1.2rem; background: #243044; border: 1px solid var(--border);
+      padding: 0.6rem 1rem; border-radius: 6px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 10;
+    }
+    #toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>本地网络转发平台</h1>
+      <p>按前端 Origin 分流 · Tab 切换配置与日志</p>
+    </div>
+    <div class="actions">
+      <button type="button" id="btn-reload">从文件重载</button>
+      <button type="button" id="btn-refresh-logs">刷新日志</button>
+      <button type="button" class="primary" id="btn-save">保存规则</button>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>前端</h2>
+      <div class="tabs" id="fe-tabs"></div>
+      <div class="row" style="margin-bottom:0.75rem;">
+        <label class="field">新前端 id<input id="new-fe-id" placeholder="web3000" /></label>
+        <label class="field">显示名<input id="new-fe-label" placeholder="本地3000" /></label>
+        <label class="field">Origins（逗号分隔）<input id="new-fe-origins" placeholder="http://localhost:3000" style="min-width:260px" /></label>
+        <button type="button" id="btn-add-fe">新建前端</button>
+        <button type="button" id="btn-copy-fe">从当前复制</button>
+        <button type="button" class="danger" id="btn-del-fe">删除当前前端</button>
+      </div>
+      <div class="row">
+        <label class="field" style="flex:1;min-width:280px;">当前前端 Origins（每行一个）
+          <textarea id="fe-origins" rows="2"></textarea>
+        </label>
+        <label class="field check" style="margin-top:0;">
+          <input type="checkbox" id="fe-rewrite-cookies" /> 改写 Set-Cookie（去 Domain / HTTP 去 Secure）
+        </label>
+        <button type="button" id="btn-save-origins">保存前端设置</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>后端环境（当前前端）</h2>
+      <div class="row">
+        <label class="field">切换环境<select id="env-select"></select></label>
+        <label class="field">新环境 id<input id="new-env-id" placeholder="staging" /></label>
+        <label class="field">显示名<input id="new-env-label" placeholder="预发" /></label>
+        <button type="button" id="btn-add-env">新建环境</button>
+        <button type="button" id="btn-copy-env">从当前复制</button>
+        <button type="button" class="danger" id="btn-del-env">删除当前环境</button>
+      </div>
+    </section>
+
+    <section>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.85rem;">
+        <h2 style="margin:0;">转发规则</h2>
+        <button type="button" id="btn-add-rule">添加规则</button>
+      </div>
+      <div id="rules"></div>
+    </section>
+
+    <section>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.85rem;flex-wrap:wrap;gap:0.5rem;">
+        <h2 style="margin:0;">最近请求（当前前端）</h2>
+        <div class="row" style="margin:0;">
+          <label class="field">状态筛选
+            <select id="log-status-filter">
+              <option value="">全部</option>
+              <option value="2xx">2xx 成功</option>
+              <option value="4xx">4xx 客户端</option>
+              <option value="5xx">5xx 服务端</option>
+            </select>
+          </label>
+          <button type="button" id="btn-clear-logs" class="danger">清空日志</button>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th class="col-expand"></th>
+            <th class="col-time">时间</th><th class="col-method">方法</th><th class="col-path">路径</th>
+            <th class="col-status">状态</th><th class="col-ms">耗时</th>
+            <th class="col-origin">Origin</th><th class="col-env">环境</th>
+            <th class="col-rule">规则</th><th class="col-target">上游</th>
+          </tr>
+        </thead>
+        <tbody id="logs"></tbody>
+      </table>
+    </section>
+  </main>
+  <div id="toast"></div>
+  <div class="modal-mask" id="preview-modal" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="preview-title">详情</h3>
+          <div class="modal-meta" id="preview-meta"></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="primary" id="btn-copy-preview">复制</button>
+          <button type="button" id="btn-close-preview">关闭</button>
+        </div>
+      </div>
+      <pre class="modal-body" id="preview-body"></pre>
+    </div>
+  </div>
+
+  <script>
+    const API = "/__admin/api";
+    let currentFe = "";
+    let currentEnv = "";
+    let frontends = [];
+    let lastLogs = [];
+    let lastLogsJson = "";
+    let expandedLogs = new Set();
+    let previewText = "";
+
+    function toast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      setTimeout(() => el.classList.remove("show"), 2200);
+    }
+    function esc(s) {
+      return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+    }
+    function headersToText(obj) {
+      if (!obj || typeof obj !== "object") return "";
+      return Object.entries(obj).map(([k,v]) => `${k}: ${v}`).join("\n");
+    }
+    function textToHeaders(text) {
+      const out = {};
+      String(text||"").split("\n").forEach(line => {
+        const t = line.trim(); if (!t) return;
+        const i = t.indexOf(":"); if (i<=0) return;
+        out[t.slice(0,i).trim()] = t.slice(i+1).trim();
+      });
+      return out;
+    }
+    function formatBeijingTime(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return String(iso);
+      const parts = new Intl.DateTimeFormat("zh-CN", {
+        timeZone: "Asia/Shanghai", year:"numeric", month:"2-digit", day:"2-digit",
+        hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false,
+      }).formatToParts(d);
+      const g = (t) => parts.find(p => p.type===t)?.value || "";
+      return `${g("year")}-${g("month")}-${g("day")} ${g("hour")}:${g("minute")}:${g("second")}`;
+    }
+
+    function ruleCard(rule, index) {
+      const div = document.createElement("div");
+      div.className = "rule";
+      div.innerHTML = `
+        <div class="rule-head"><strong>规则 #${index+1}</strong>
+          <div style="display:flex;gap:0.4rem;">
+            <button type="button" class="btn-probe">试连</button>
+            <button type="button" class="danger btn-del">删除</button>
+          </div>
+        </div>
+        <div class="grid">
+          <label class="field">名称<input class="f-name" value="${esc(rule.name||"")}" /></label>
+          <label class="field">匹配前缀<input class="f-prefix" value="${esc(rule.match_prefix||"")}" placeholder="/api" /></label>
+          <label class="field">目标地址<input class="f-target" value="${esc(rule.target||"")}" /></label>
+          <label class="field check"><input type="checkbox" class="f-strip" ${rule.strip_prefix?"checked":""}/> 去掉前缀再转发</label>
+        </div>
+        <label class="field">注入请求头
+          <textarea class="f-headers">${esc(headersToText(rule.headers))}</textarea>
+        </label>`;
+      div.querySelector(".btn-del").onclick = () => { div.remove(); renumber(); };
+      div.querySelector(".btn-probe").onclick = () => {
+        const name = div.querySelector(".f-name").value.trim();
+        const prefix = div.querySelector(".f-prefix").value.trim();
+        probeRule(name, prefix).catch(e => toast(String(e)));
+      };
+      return div;
+    }
+    function renumber() {
+      document.querySelectorAll("#rules .rule").forEach((el,i) => {
+        el.querySelector(".rule-head strong").textContent = `规则 #${i+1}`;
+      });
+    }
+    function collectRules() {
+      return [...document.querySelectorAll("#rules .rule")].map(el => ({
+        name: el.querySelector(".f-name").value.trim(),
+        match_prefix: el.querySelector(".f-prefix").value.trim(),
+        target: el.querySelector(".f-target").value.trim(),
+        strip_prefix: el.querySelector(".f-strip").checked,
+        headers: textToHeaders(el.querySelector(".f-headers").value),
+      }));
+    }
+    function renderRules(rules) {
+      const box = document.getElementById("rules");
+      box.innerHTML = "";
+      if (!rules.length) {
+        box.innerHTML = '<p class="empty">暂无规则</p>';
+        return;
+      }
+      rules.forEach((r,i) => box.appendChild(ruleCard(r,i)));
+    }
+
+    function renderFeTabs() {
+      const tabs = document.getElementById("fe-tabs");
+      tabs.innerHTML = frontends.map(f =>
+        `<button type="button" class="tab ${f.id===currentFe?"active":""}" data-id="${esc(f.id)}">${esc(f.label||f.id)}</button>`
+      ).join("");
+      tabs.querySelectorAll(".tab").forEach(btn => {
+        btn.onclick = () => selectFrontend(btn.dataset.id);
+      });
+    }
+
+    async function loadFrontends() {
+      const res = await fetch(`${API}/frontends`);
+      const data = await res.json();
+      frontends = data.frontends || [];
+      if (!currentFe || !frontends.some(f => f.id === currentFe)) {
+        currentFe = frontends[0]?.id || "";
+      }
+      renderFeTabs();
+    }
+
+    async function selectFrontend(id) {
+      currentFe = id;
+      lastLogsJson = "";
+      expandedLogs.clear();
+      renderFeTabs();
+      await Promise.all([loadEnvs(), loadRules(), loadLogs()]);
+    }
+
+    async function loadEnvs() {
+      if (!currentFe) return;
+      const res = await fetch(`${API}/envs?frontend=${encodeURIComponent(currentFe)}`);
+      const data = await res.json();
+      if (!res.ok) { toast(data.error||"加载环境失败"); return; }
+      currentEnv = data.active || "";
+      const sel = document.getElementById("env-select");
+      sel.innerHTML = (data.envs||[]).map(e =>
+        `<option value="${esc(e.id)}" ${e.id===currentEnv?"selected":""}>${esc(e.label||e.id)} (${e.id}) · ${e.rule_count}条</option>`
+      ).join("");
+    }
+
+    async function loadRules() {
+      if (!currentFe) return;
+      const res = await fetch(`${API}/rules?frontend=${encodeURIComponent(currentFe)}`);
+      const data = await res.json();
+      if (!res.ok) { toast(data.error||"加载规则失败"); return; }
+      currentEnv = data.active || currentEnv;
+      document.getElementById("fe-origins").value = (data.origins||[]).join("\n");
+      document.getElementById("fe-rewrite-cookies").checked = !!data.rewrite_cookies;
+      renderRules(data.rules||[]);
+    }
+
+    async function saveRules() {
+      if (!currentFe) return;
+      const res = await fetch(`${API}/rules?frontend=${encodeURIComponent(currentFe)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(collectRules()),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error||"保存失败"); return; }
+      renderRules(data.rules||[]);
+      await loadFrontends();
+      toast("规则已保存");
+    }
+
+    async function saveOrigins() {
+      if (!currentFe) return;
+      const origins = document.getElementById("fe-origins").value.split("\n").map(s=>s.trim()).filter(Boolean);
+      const rewrite_cookies = document.getElementById("fe-rewrite-cookies").checked;
+      const res = await fetch(`${API}/frontends/update`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: currentFe, origins, rewrite_cookies }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error||"保存失败"); return; }
+      await loadFrontends();
+      toast("前端设置已保存");
+    }
+
+    async function probeRule(ruleName, matchPrefix) {
+      if (!currentFe) return;
+      const res = await fetch(`${API}/probe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          frontend: currentFe,
+          rule_name: ruleName || undefined,
+          match_prefix: matchPrefix || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error||"试连失败"); return; }
+      const raw = data.body_preview || data.error || "(无响应体)";
+      openPreviewText(
+        "试连结果",
+        `试连 ${data.status || 0} · ${data.duration_ms || 0}ms · ${data.url || ""}`,
+        raw
+      );
+    }
+
+    async function switchEnv(id) {
+      if (!currentFe || !id || id===currentEnv) return;
+      const res = await fetch(`${API}/envs/active`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ frontend: currentFe, id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error||"切换失败"); await loadEnvs(); return; }
+      toast(`已切换环境：${id}`);
+      await loadEnvs();
+      await loadRules();
+    }
+
+    async function addEnv(copy) {
+      const id = document.getElementById("new-env-id").value.trim();
+      const label = document.getElementById("new-env-label").value.trim();
+      if (!id) { toast("请填写环境 id"); return; }
+      const body = { frontend: currentFe, id, label };
+      if (copy) body.copy_from = currentEnv;
+      const res = await fetch(`${API}/envs`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error||"创建失败"); return; }
+      document.getElementById("new-env-id").value = "";
+      document.getElementById("new-env-label").value = "";
+      toast(`已创建环境：${id}`);
+      await loadEnvs();
+    }
+
+    async function deleteEnv() {
+      const sel = document.getElementById("env-select");
+      const others = [...sel.options].map(o=>o.value).filter(id => id !== currentEnv);
+      if (!others.length) { toast("至少保留一个环境"); return; }
+      const toDelete = currentEnv;
+      const fallback = others[0];
+      if (!confirm(`将先切换到「${fallback}」，再删除「${toDelete}」？`)) return;
+      await switchEnv(fallback);
+      const res = await fetch(`${API}/envs/delete`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ frontend: currentFe, id: toDelete }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error||"删除失败"); return; }
+      toast(`已删除环境：${toDelete}`);
+      await loadEnvs();
+      await loadRules();
+    }
+
+    async function addFrontend(copy) {
+      const id = document.getElementById("new-fe-id").value.trim();
+      const label = document.getElementById("new-fe-label").value.trim();
+      const origins = document.getElementById("new-fe-origins").value.split(",").map(s=>s.trim()).filter(Boolean);
+      if (!id) { toast("请填写前端 id"); return; }
+      const body = { id, label, origins };
+      if (copy) body.copy_from = currentFe;
+      const res = await fetch(`${API}/frontends`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error||"创建失败"); return; }
+      document.getElementById("new-fe-id").value = "";
+      document.getElementById("new-fe-label").value = "";
+      document.getElementById("new-fe-origins").value = "";
+      toast(`已创建前端：${id}`);
+      await loadFrontends();
+      await selectFrontend(id);
+    }
+
+    async function deleteFrontend() {
+      if (frontends.length <= 1) { toast("至少保留一个前端"); return; }
+      const toDelete = currentFe;
+      const fallback = frontends.find(f => f.id !== toDelete)?.id;
+      if (!confirm(`确定删除前端「${toDelete}」？`)) return;
+      const res = await fetch(`${API}/frontends/delete`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: toDelete }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error||"删除失败"); return; }
+      toast(`已删除前端：${toDelete}`);
+      currentFe = fallback || "";
+      await loadFrontends();
+      if (currentFe) await selectFrontend(currentFe);
+    }
+
+    function statusFilterRange() {
+      const v = document.getElementById("log-status-filter").value;
+      if (v === "2xx") return { status_min: 200, status_max: 299 };
+      if (v === "4xx") return { status_min: 400, status_max: 499 };
+      if (v === "5xx") return { status_min: 500, status_max: 599 };
+      return {};
+    }
+
+    function logKey(l) {
+      return [l.time, l.method, l.path, l.status, l.duration_ms].join("\t");
+    }
+
+    function prettyPreview(text) {
+      if (!text) return "";
+      const nl = text.indexOf("\n");
+      if (nl > 0 && text.startsWith("?")) {
+        return text.slice(0, nl) + "\n" + prettyPreview(text.slice(nl + 1));
+      }
+      try {
+        return JSON.stringify(JSON.parse(text), null, 2);
+      } catch {
+        return text;
+      }
+    }
+
+    function detailItem(label, value, opts = {}) {
+      const text = value || "-";
+      const plain = opts.plain ? " plain" : "";
+      const copyBtn = opts.field != null
+        ? `<button type="button" class="detail-copy" data-idx="${opts.idx}" data-field="${opts.field}">复制</button>`
+        : `<span></span>`;
+      return `<div class="detail-item">
+        <div class="detail-label">${esc(label)}</div>
+        <pre class="detail-value${plain}">${esc(text)}</pre>
+        ${copyBtn}
+      </div>`;
+    }
+
+    function fieldText(log, field) {
+      if (!log) return "";
+      if (field === "target") return log.target || "";
+      if (field === "req") return prettyPreview(log.req_preview || "");
+      if (field === "resp") return prettyPreview(log.body_preview || "");
+      return "";
+    }
+
+    function toggleLogDetail(btn) {
+      const idx = Number(btn.dataset.idx);
+      const row = btn.closest("tr.log-row");
+      const detail = row && row.nextElementSibling;
+      if (!detail || !detail.classList.contains("log-detail")) return;
+      const l = lastLogs[idx];
+      const key = l ? logKey(l) : "";
+      const open = detail.classList.toggle("show");
+      btn.classList.toggle("open", open);
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (!key) return;
+      if (open) expandedLogs.add(key);
+      else expandedLogs.delete(key);
+    }
+
+    async function copyText(text) {
+      if (!text) { toast("无内容可复制"); return; }
+      try {
+        await navigator.clipboard.writeText(text);
+        toast("已复制到剪贴板");
+      } catch {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+        toast("已复制到剪贴板");
+      }
+    }
+
+    function openPreviewText(title, meta, raw) {
+      previewText = prettyPreview(raw || "") || "(无内容)";
+      document.getElementById("preview-title").textContent = title;
+      document.getElementById("preview-meta").textContent = meta || "";
+      document.getElementById("preview-body").textContent = previewText;
+      document.getElementById("preview-modal").classList.add("show");
+    }
+
+    function closePreview() {
+      document.getElementById("preview-modal").classList.remove("show");
+      previewText = "";
+    }
+
+    async function copyPreview() {
+      await copyText(previewText || document.getElementById("preview-body").textContent || "");
+    }
+
+    async function loadLogs(force = false) {
+      if (!currentFe) return;
+      const range = statusFilterRange();
+      let url = `${API}/logs?limit=50&frontend=${encodeURIComponent(currentFe)}`;
+      if (range.status_min != null) url += `&status_min=${range.status_min}`;
+      if (range.status_max != null) url += `&status_max=${range.status_max}`;
+      const res = await fetch(url);
+      const logs = await res.json();
+      const list = Array.isArray(logs) ? logs : [];
+      const nextJson = JSON.stringify(list);
+      const tbody = document.getElementById("logs");
+      if (!force && nextJson === lastLogsJson && tbody.querySelector(".log-row, .empty")) {
+        return;
+      }
+      // 重绘前先根据当前 DOM 同步展开态，避免 key 不一致丢状态
+      tbody.querySelectorAll("tr.log-detail.show").forEach((detail) => {
+        const idx = Number(detail.dataset.idx);
+        const l = lastLogs[idx];
+        if (l) expandedLogs.add(logKey(l));
+      });
+      lastLogsJson = nextJson;
+      lastLogs = list;
+      if (!lastLogs.length) {
+        expandedLogs.clear();
+        tbody.innerHTML = '<tr><td colspan="10" class="empty">暂无该前端的请求日志</td></tr>';
+        return;
+      }
+      const alive = new Set(lastLogs.map(logKey));
+      for (const k of [...expandedLogs]) {
+        if (!alive.has(k)) expandedLogs.delete(k);
+      }
+      tbody.innerHTML = lastLogs.map((l, i) => {
+        const ok = l.status>=200 && l.status<400;
+        const key = logKey(l);
+        const open = expandedLogs.has(key);
+        const reqText = prettyPreview(l.req_preview || "");
+        const respText = prettyPreview(l.body_preview || "");
+        return `<tr class="log-row">
+          <td class="col-expand">
+            <button type="button" class="expand-btn${open?" open":""}" data-idx="${i}" aria-label="展开详情" aria-expanded="${open?"true":"false"}">▶</button>
+          </td>
+          <td class="col-time" title="${esc(formatBeijingTime(l.time))}">${esc(formatBeijingTime(l.time))}</td>
+          <td class="col-method">${esc(l.method)}</td>
+          <td class="col-path" title="${esc(l.path)}">${esc(l.path)}</td>
+          <td class="col-status ${ok?"status-ok":"status-err"}">${l.status}</td>
+          <td class="col-ms">${l.duration_ms}ms</td>
+          <td class="col-origin" title="${esc(l.origin||"")}">${esc(l.origin||"")}</td>
+          <td class="col-env">${esc(l.env||"")}</td>
+          <td class="col-rule" title="${esc(l.rule)}">${esc(l.rule)}</td>
+          <td class="col-target" title="${esc(l.target)}">${esc(l.target)}</td>
+        </tr>
+        <tr class="log-detail${open?" show":""}" data-idx="${i}">
+          <td colspan="10">
+            <div class="detail-grid">
+              ${detailItem("Origin", l.origin || "-", { plain: true })}
+              ${detailItem("环境", l.env || "-", { plain: true })}
+              ${detailItem("规则", l.rule || "-", { plain: true })}
+              ${detailItem("上游", l.target || "-", l.target ? { idx: i, field: "target" } : {})}
+              ${detailItem("入参", reqText || "(无)", reqText ? { idx: i, field: "req" } : {})}
+              ${detailItem("响应", respText || "(无)", respText ? { idx: i, field: "resp" } : {})}
+            </div>
+          </td>
+        </tr>`;
+      }).join("");
+      tbody.querySelectorAll(".expand-btn").forEach((btn) => {
+        btn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleLogDetail(btn);
+        };
+      });
+      tbody.querySelectorAll(".detail-copy").forEach((btn) => {
+        btn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const text = fieldText(lastLogs[Number(btn.dataset.idx)], btn.dataset.field);
+          copyText(text).catch(err => toast(String(err)));
+        };
+      });
+    }
+
+    async function clearLogs() {
+      if (!currentFe) return;
+      if (!confirm("清空当前前端的请求日志？")) return;
+      const res = await fetch(`${API}/logs/clear`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ frontend: currentFe }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error||"清空失败"); return; }
+      toast("日志已清空");
+      lastLogsJson = "";
+      expandedLogs.clear();
+      await loadLogs();
+    }
+
+    async function reloadFromFile() {
+      const res = await fetch(`${API}/reload`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error||"重载失败"); return; }
+      await loadFrontends();
+      if (currentFe) await selectFrontend(currentFe);
+      toast("已从 config.yaml 重载");
+    }
+
+    document.getElementById("env-select").onchange = e => switchEnv(e.target.value).catch(err => toast(String(err)));
+    document.getElementById("btn-add-env").onclick = () => addEnv(false).catch(e => toast(String(e)));
+    document.getElementById("btn-copy-env").onclick = () => addEnv(true).catch(e => toast(String(e)));
+    document.getElementById("btn-del-env").onclick = () => deleteEnv().catch(e => toast(String(e)));
+    document.getElementById("btn-add-fe").onclick = () => addFrontend(false).catch(e => toast(String(e)));
+    document.getElementById("btn-copy-fe").onclick = () => addFrontend(true).catch(e => toast(String(e)));
+    document.getElementById("btn-del-fe").onclick = () => deleteFrontend().catch(e => toast(String(e)));
+    document.getElementById("btn-save-origins").onclick = () => saveOrigins().catch(e => toast(String(e)));
+    document.getElementById("btn-save").onclick = () => saveRules().catch(e => toast(String(e)));
+    document.getElementById("btn-reload").onclick = () => reloadFromFile().catch(e => toast(String(e)));
+    document.getElementById("btn-refresh-logs").onclick = () => loadLogs(true).catch(e => toast(String(e)));
+    document.getElementById("btn-clear-logs").onclick = () => clearLogs().catch(e => toast(String(e)));
+    document.getElementById("log-status-filter").onchange = () => {
+      lastLogsJson = "";
+      expandedLogs.clear();
+      loadLogs(true).catch(e => toast(String(e)));
+    };
+    document.getElementById("btn-close-preview").onclick = () => closePreview();
+    document.getElementById("btn-copy-preview").onclick = () => copyPreview().catch(e => toast(String(e)));
+    document.getElementById("preview-modal").onclick = (e) => {
+      if (e.target.id === "preview-modal") closePreview();
+    };
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closePreview();
+    });
+    document.getElementById("btn-add-rule").onclick = () => {
+      const box = document.getElementById("rules");
+      const empty = box.querySelector(".empty"); if (empty) empty.remove();
+      box.appendChild(ruleCard({ name:"api", match_prefix:"/api", target:"http://example.com", strip_prefix:true, headers:{} }, box.querySelectorAll(".rule").length));
+    };
+
+    (async () => {
+      await loadFrontends();
+      if (currentFe) await selectFrontend(currentFe);
+    })().catch(e => toast(String(e)));
+    setInterval(() => {
+      if (document.hidden) return;
+      loadLogs(false).catch(() => {});
+    }, 5000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+listen: 127.0.0.1:8787
+cors:
+  allow_origins:
+  - http://localhost:8080
+  - http://127.0.0.1:8080
+  - http://localhost:5173
+  - http://127.0.0.1:5173
+frontends:
+  web8080:
+    label: 本地8080
+    origins:
+    - http://localhost:8080
+    - http://127.0.0.1:8080
+    active_env: dev
+    envs:
+      dev:
+        label: 开发
+        rules:
+        - name: api
+          match_prefix: /api
+          target: http://172.20.127.168:8885
+          strip_prefix: true
+          headers: {}
+      test:
+        label: 测试
+        rules:
+        - name: api
+          match_prefix: /api
+          target: http://172.20.130.27:8885
+          strip_prefix: true
+          headers: {}
+      prod:
+        label: 生产
+        rules:
+        - name: api
+          match_prefix: /api
+          target: http://hrwuhan.com
+          strip_prefix: true
+          headers: {}
+  web5173:
+    label: 本地5173
+    origins:
+    - http://localhost:5173
+    - http://127.0.0.1:5173
+    active_env: test
+    rewrite_cookies: true
+    envs:
+      test:
+        label: 测试
+        rules:
+        - name: api
+          match_prefix: /api
+          target: http://172.20.130.27:8885
+          strip_prefix: true
+          headers: {}
+      prod:
+        label: 生产
+        rules:
+        - name: api
+          match_prefix: /api
+          target: http://hrwuhan.com
+          strip_prefix: true
+          headers: {}
