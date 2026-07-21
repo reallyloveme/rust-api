@@ -18,7 +18,7 @@ frontends:
         rules:
         - name: api
           match_prefix: /api
-          target: http://172.20.127.168:8885
+          target: http://xxx
           strip_prefix: true
           headers: {}
       test:
@@ -26,7 +26,7 @@ frontends:
         rules:
         - name: api
           match_prefix: /api
-          target: http://172.20.130.27:8885
+          target: http://xxx
           strip_prefix: true
           headers: {}
       prod:
@@ -34,7 +34,7 @@ frontends:
         rules:
         - name: api
           match_prefix: /api
-          target: http://hrwuhan.com
+          target: http://xxx
           strip_prefix: true
           headers: {}
   web5173:
@@ -50,7 +50,7 @@ frontends:
         rules:
         - name: api
           match_prefix: /api
-          target: http://172.20.130.27:8885
+          target: http://xxx
           strip_prefix: true
           headers: {}
       prod:
@@ -58,6 +58,6 @@ frontends:
         rules:
         - name: api
           match_prefix: /api
-          target: http://hrwuhan.com
+          target: http://xxx
           strip_prefix: true
           headers: {}
