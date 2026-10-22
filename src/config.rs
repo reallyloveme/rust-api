@@ -103,8 +103,7 @@ impl Config {
         out.rules.clear();
         // CORS 合并各前端 origins，便于持久化
         out.cors.allow_origins = out.all_origins();
-        let content = serde_yaml::to_string(&out)
-            .map_err(|e| format!("序列化配置失败: {}", e))?;
+        let content = serde_yaml::to_string(&out).map_err(|e| format!("序列化配置失败: {}", e))?;
         fs::write(path, content).map_err(|e| format!("写入配置失败 {}: {}", path.display(), e))?;
         Ok(())
     }

@@ -4,3 +4,7 @@
 *.pdb
 hello.exe
 hello.rs
+providers.yaml
+.env
+.env.*
+!.env.example

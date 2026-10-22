@@ -100,7 +100,11 @@ pub fn body_preview(content_type: Option<&str>, body: &[u8]) -> Option<String> {
     }
 }
 
-pub fn request_preview(query: Option<&str>, content_type: Option<&str>, body: &[u8]) -> Option<String> {
+pub fn request_preview(
+    query: Option<&str>,
+    content_type: Option<&str>,
+    body: &[u8],
+) -> Option<String> {
     let mut parts = Vec::new();
     if let Some(q) = query.map(str::trim).filter(|s| !s.is_empty()) {
         parts.push(format!("?{q}"));
@@ -213,10 +217,8 @@ pub async fn proxy_handler(State(state): State<AppState>, req: Request) -> Respo
         req_headers.insert(name.clone(), value.clone());
     }
     for (k, v) in &rule.headers {
-        if let (Ok(name), Ok(value)) = (
-            HeaderName::try_from(k.as_str()),
-            HeaderValue::from_str(v),
-        ) {
+        if let (Ok(name), Ok(value)) = (HeaderName::try_from(k.as_str()), HeaderValue::from_str(v))
+        {
             req_headers.insert(name, value);
         }
     }

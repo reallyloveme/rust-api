@@ -1,4 +1,88 @@
-# 本地网络转发平台
+# Rust API Playground / 本地网络转发平台
+
+在现有 Rust 代理上增量增加 AI API 调试能力。当前已完成 **里程碑 1：供应商管理与非流式 Chat Completions**。
+
+## AI Playground 快速开始
+
+1. 在启动服务的终端设置密钥（无需鉴权的本机供应商可省略）：
+
+   ```powershell
+   $env:RUST_API_KEY_COMPATIBLE = "你的供应商密钥"
+   cargo run --locked
+   ```
+
+   Linux/macOS 使用 `export RUST_API_KEY_COMPATIBLE='你的供应商密钥'` 后运行 `cargo run --locked`。不自动读取 `.env`。
+
+2. 打开 [AI Playground](http://127.0.0.1:8787/__admin/playground)，或从现有管理台点击「AI Playground」。
+3. 新建供应商：填写 ID、名称、Base URL（例如 `https://example.com/v1`）、模型名称、环境变量名 `RUST_API_KEY_COMPATIBLE` 和超时。
+4. 选择供应商和模型，填写 System / User Prompt、JSON 参数，点击发送。
+5. 查看上游 HTTP 状态、总耗时、模型回答、完整 JSON 和供应商实际返回的 Token 用量。没有用量时不会估算。
+
+Windows 缺少 MSVC `link.exe` 时，可以使用已安装的 MinGW GCC 和 GNU 工具链：
+
+```powershell
+rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal
+cargo +stable-x86_64-pc-windows-gnu run --locked
+```
+
+`.cargo/config.toml` 使用 Rust 随附的 LLD 与配套 MinGW CRT，不依赖个人目录中的链接器；原生 C 依赖仍需 PATH 中可用的 GCC/Clang。原 `.\run.ps1` 仍使用默认工具链。
+
+### 供应商配置与访问边界
+
+- 默认写入 `config.yaml` 同目录的 `providers.yaml`；可以通过 `PROVIDERS_PATH` 指定文件。初始文件不存在时使用空列表，可直接在页面新建，也可参考 `providers.example.yaml`。文件损坏时启动失败，不静默覆盖。
+- 配置文件只保存环境变量引用，禁止 `api_key` 等未知字段；引用必须以 `RUST_API_KEY_` 开头，不能读取其他服务端环境变量。修改终端变量后需重启服务。
+- 供应商写入串行执行，使用同目录临时文件替换；保存失败不应用修改，重启后配置仍在。它与原代理配置的保存、重载独立。
+- Base URL 不允许凭证、查询参数或片段；外部地址必须使用 HTTPS，本机 `localhost` / loopback 地址可使用 HTTP。按原样在基址末尾追加 `/chat/completions`，不自动添加 `/v1`，不自动发现模型。
+- **全部管理页面与管理 API 仅允许本机连接、本机 Host 和浏览器同源访问**。即使代理监听 `0.0.0.0`，远程也不能访问管理台；普通代理的 Origin 分流和 CORS 继续保留。此版本尚无远程管理鉴权或多用户能力，不支持通过反向代理开放管理台。
+- API Key 仅在后端注入 Authorization；调用内容不写入现有代理日志，也不持久化。返回 JSON 会屏蔽当前密钥和常见敏感字段；非 JSON 文本只屏蔽当前密钥，因此上游仍应避免返回其他敏感数据。
+- 每次发送只调用一次上游，不重试、不自动跟随重定向。发送可能产生真实费用。
+
+### API 契约
+
+管理 API 均位于 `/__admin/api`；浏览器需从同源管理页面调用，命令行从本机调用即可。
+
+| 方法与路径 | 行为 |
+| --- | --- |
+| `GET /providers` | 返回 `{ "providers": [...] }` |
+| `POST /providers` | 新增供应商，成功 `201`，重复 ID `409` |
+| `GET /providers/{id}` | 查看配置，不含密钥值 |
+| `PUT /providers/{id}` | 完整替换配置，路径 ID 须与请求 ID 一致 |
+| `DELETE /providers/{id}` | 删除配置，成功 `204`，不存在 `404` |
+| `POST /playground/chat` | 非流式文本 Chat Completions |
+
+供应商请求体与 `providers.example.yaml` 字段一致，协议固定为 `openai_compatible`。模型列表为手动维护；超时范围 1–300 秒，默认 60 秒。
+
+调用请求示例：
+
+```json
+{
+  "provider_id": "compatible",
+  "model": "model-a",
+  "messages": [
+    { "role": "system", "content": "回答简洁" },
+    { "role": "user", "content": "你好" }
+  ],
+  "parameters": { "temperature": 0.7, "max_completion_tokens": 128 }
+}
+```
+
+文本角色支持 `system`、`developer`、`user`、`assistant`，最多 100 条。`parameters` 允许传递兼容供应商的其他 JSON 参数，但不能覆盖 `model`、`messages`、`stream`、`stream_options`；当前固定发送 `stream: false`。不同模型支持的参数以供应商实际返回为准。[Chat Completions 官方协议参考](https://developers.openai.com/api/reference/resources/chat)。
+
+结果包含 `ok`、`provider_id`、`model`、`http_status`、`duration_ms`、`response`、`raw_response`、`usage` 和 `error`。其中 `http_status` 是真实上游状态；尚未收到上游响应时为 `null`。`duration_ms` 覆盖发送至完整响应体读取完成，不是首 Token 延迟。上游 401/403、429、4xx、5xx 保留 HTTP 状态并分类为 `authentication`、`rate_limit`、`upstream_request`、`upstream_server`。
+
+网络失败返回 `502 connection`，超时返回 `504 timeout`，成功 HTTP 状态但无效 JSON/Chat 响应返回 `502 protocol`，重定向返回 `502 redirect` 并保留原始状态。上游响应最大 2 MiB，超限返回 `502 response_too_large`；管理请求体最大 256 KiB。路由层 JSON 解析错误采用 Axum 默认 400/415/422，超限为 413；业务参数错误为 400。
+
+### 验证与后续里程碑
+
+```bash
+cargo test --locked
+cargo fmt --all -- --check
+cargo clippy --all-targets --locked -- -D warnings
+```
+
+测试使用本机模拟上游，不需要真实密钥，不产生模型费用。覆盖供应商 CRUD / 重启读取 / 并发保存 / 写入失败、认证与限流错误、超时、无效 JSON、响应限制、密钥脱敏、管理访问边界，以及原代理路由、请求体、Cookie、CORS 的回归。
+
+本次交付不包含 SSE、SQLite 调用历史、重放或费用估算。下一步按顺序实现：可靠 SSE 与取消 → SQLite 历史及保留策略 → 完整 Playground 验收。现有代理说明如下。
 
 把本地前端的 API 请求反向代理到生产/测试后端，按浏览器 `Origin` 区分多前端，并提供 Web 管理台做配置与联调。
 
@@ -91,7 +175,7 @@ WebSocket、`Location` 改写、响应流式透传、管理台鉴权、流量重
 ### 2.1 环境要求
 
 - Rust（推荐 stable）
-- Windows 若用 **GNU** 工具链：需 MinGW（如 WinLibs）的 `gcc` 在 PATH；本仓库 `.cargo/config.toml` 可指定 linker
+- Windows 若用 **GNU** 工具链：原生 C 依赖需要 MinGW GCC/Clang 在 PATH；链接使用 `.cargo/config.toml` 配置的 Rust 随附工具和 CRT
 
 ### 2.2 启动
 

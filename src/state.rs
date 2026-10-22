@@ -27,6 +27,7 @@ pub struct RequestLog {
 
 #[derive(Clone)]
 pub struct AppState {
+    pub providers: crate::providers::ProviderRegistry,
     pub frontends: Arc<RwLock<HashMap<String, FrontendConfig>>>,
     pub logs: Arc<RwLock<VecDeque<RequestLog>>>,
     pub config_path: Arc<String>,
@@ -36,7 +37,11 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn from_config(config: &Config, config_path: String) -> Self {
+    pub fn from_config(
+        config: &Config,
+        config_path: String,
+        providers: crate::providers::ProviderRegistry,
+    ) -> Self {
         let http = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(std::time::Duration::from_secs(10))
@@ -45,6 +50,7 @@ impl AppState {
             .expect("创建 HTTP 客户端失败");
 
         Self {
+            providers,
             frontends: Arc::new(RwLock::new(config.frontends.clone())),
             logs: Arc::new(RwLock::new(VecDeque::with_capacity(LOG_CAPACITY))),
             config_path: Arc::new(config_path),
@@ -210,10 +216,8 @@ pub fn extract_origin(headers: &axum::http::HeaderMap) -> Option<String> {
 fn origin_from_url(url: &str) -> Option<String> {
     let (scheme, rest) = if let Some(r) = url.strip_prefix("https://") {
         ("https", r)
-    } else if let Some(r) = url.strip_prefix("http://") {
-        ("http", r)
     } else {
-        return None;
+        ("http", url.strip_prefix("http://")?)
     };
     let hostport = rest.split('/').next()?.split('?').next()?;
     if hostport.is_empty() {

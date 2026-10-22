@@ -1,8 +1,14 @@
 mod admin;
 mod config;
 mod cors;
+mod playground;
+mod providers;
 mod proxy;
+mod security;
 mod state;
+
+#[cfg(test)]
+mod tests;
 
 use admin::{
     admin_page, clear_logs, create_env, create_frontend, delete_env, delete_frontend, get_logs,
@@ -54,8 +60,37 @@ async fn main() {
 
     let listen = config.listen.clone();
     let fe_count = config.frontends.len();
-    let state = AppState::from_config(&config, config_path);
+    let providers_path = std::env::var_os("PROVIDERS_PATH")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::Path::new(&config_path).with_file_name("providers.yaml"));
+    let providers = providers::ProviderRegistry::load(providers_path)
+        .unwrap_or_else(|error| panic!("{error}；请修正供应商配置后重启"));
+    let state = AppState::from_config(&config, config_path, providers);
 
+    let app = build_app(state);
+    let addr: SocketAddr = listen
+        .parse()
+        .unwrap_or_else(|_| "127.0.0.1:8787".parse().unwrap());
+
+    tracing::info!("转发服务监听 http://{addr}");
+    tracing::info!("已配置 {fe_count} 个前端");
+    tracing::info!("健康检查 http://{addr}/health");
+    tracing::info!("管理台 http://{addr}/__admin");
+    tracing::info!("AI Playground http://{addr}/__admin/playground");
+
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .unwrap_or_else(|e| panic!("绑定 {addr} 失败: {e}"));
+
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .expect("服务异常退出");
+}
+
+fn build_app(state: AppState) -> Router {
     let admin_routes = Router::new()
         .route("/", get(admin_page))
         .route("/api/frontends", get(list_frontends).post(create_frontend))
@@ -68,30 +103,26 @@ async fn main() {
         .route("/api/logs", get(get_logs))
         .route("/api/logs/clear", post(clear_logs))
         .route("/api/probe", post(probe_rule))
-        .route("/api/reload", post(reload_config));
+        .route("/api/reload", post(reload_config))
+        .route("/playground", get(playground::routes::page))
+        .route(
+            "/api/providers",
+            get(providers::routes::list).post(providers::routes::create),
+        )
+        .route(
+            "/api/providers/{id}",
+            get(providers::routes::get)
+                .put(providers::routes::update)
+                .delete(providers::routes::delete),
+        )
+        .route("/api/playground/chat", post(playground::routes::chat))
+        .layer(axum::extract::DefaultBodyLimit::max(256 * 1024))
+        .layer(middleware::from_fn(security::local_admin));
 
-    let app = Router::new()
+    Router::new()
         .route("/health", get(health))
         .nest("/__admin", admin_routes)
         .fallback(any(proxy_handler))
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            dynamic_cors,
-        ))
-        .with_state(state);
-
-    let addr: SocketAddr = listen
-        .parse()
-        .unwrap_or_else(|_| "127.0.0.1:8787".parse().unwrap());
-
-    tracing::info!("转发服务监听 http://{addr}");
-    tracing::info!("已配置 {fe_count} 个前端");
-    tracing::info!("健康检查 http://{addr}/health");
-    tracing::info!("管理台 http://{addr}/__admin");
-
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .unwrap_or_else(|e| panic!("绑定 {addr} 失败: {e}"));
-
-    axum::serve(listener, app).await.expect("服务异常退出");
+        .layer(middleware::from_fn_with_state(state.clone(), dynamic_cors))
+        .with_state(state)
 }

@@ -16,7 +16,11 @@ pub async fn admin_page() -> Html<&'static str> {
 }
 
 fn bad(msg: impl Into<String>) -> axum::response::Response {
-    (StatusCode::BAD_REQUEST, Json(json!({ "error": msg.into() }))).into_response()
+    (
+        StatusCode::BAD_REQUEST,
+        Json(json!({ "error": msg.into() })),
+    )
+        .into_response()
 }
 
 fn save_apply(state: &AppState, config: &Config) -> Result<(), String> {
@@ -216,7 +220,12 @@ pub async fn list_envs(
     State(state): State<AppState>,
     Query(q): Query<FrontendQuery>,
 ) -> impl IntoResponse {
-    let Some(fid) = q.frontend.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) else {
+    let Some(fid) = q
+        .frontend
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    else {
         return bad("缺少 frontend 参数");
     };
     let frontends = state.frontends.read().await;
@@ -306,7 +315,11 @@ pub async fn create_env(
     if fe.envs.contains_key(&eid) {
         return bad(format!("环境 '{eid}' 已存在"));
     }
-    let rules = if let Some(from) = body.copy_from.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty())
+    let rules = if let Some(from) = body
+        .copy_from
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
     {
         match fe.envs.get(from) {
             Some(e) => e.rules.clone(),
@@ -375,7 +388,12 @@ pub async fn get_rules(
     State(state): State<AppState>,
     Query(q): Query<FrontendQuery>,
 ) -> impl IntoResponse {
-    let Some(fid) = q.frontend.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) else {
+    let Some(fid) = q
+        .frontend
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    else {
         return bad("缺少 frontend 参数");
     };
     let frontends = state.frontends.read().await;
@@ -403,7 +421,12 @@ pub async fn put_rules(
     Query(q): Query<FrontendQuery>,
     Json(rules): Json<Vec<Rule>>,
 ) -> impl IntoResponse {
-    let Some(fid) = q.frontend.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) else {
+    let Some(fid) = q
+        .frontend
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    else {
         return bad("缺少 frontend 参数");
     };
     let mut config = state.snapshot_config().await;
@@ -525,10 +548,7 @@ pub async fn probe_rule(
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
     {
-        env.rules
-            .iter()
-            .find(|r| r.match_prefix == prefix)
-            .cloned()
+        env.rules.iter().find(|r| r.match_prefix == prefix).cloned()
     } else {
         env.rules.first().cloned()
     };

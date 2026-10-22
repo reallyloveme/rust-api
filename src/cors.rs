@@ -31,7 +31,12 @@ pub async fn dynamic_cors(State(state): State<AppState>, req: Request, next: Nex
     if is_options {
         let mut res = Response::builder().status(StatusCode::NO_CONTENT);
         if origin_allowed {
-            inject_cors(res.headers_mut().unwrap(), &req_origin, allow_any, acrh.as_ref());
+            inject_cors(
+                res.headers_mut().unwrap(),
+                &req_origin,
+                allow_any,
+                acrh.as_ref(),
+            );
         }
         return res
             .body(Body::empty())

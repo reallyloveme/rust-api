@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rust API Playground</title>
+  <style>
+    :root { color-scheme:dark; --bg:#0f1419; --panel:#1a2332; --border:#2d3a4f; --text:#e7ecf3; --muted:#a7b4c9; --accent:#3d8bfd; --danger:#ff8895; --ok:#3ecf8e; --mono:"Cascadia Code",Consolas,monospace; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:0.875rem/1.6 "Segoe UI",system-ui,sans-serif; }
+    header { border-bottom:1px solid var(--border); padding:1rem 1.5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+    h1 { font-size:1.2rem; margin:0; } h2 { font-size:1rem; margin:0 0 1rem; } p { margin:0.5rem 0; }
+    a { color:var(--accent); } small,.muted { color:var(--muted); }
+    main { max-width:90rem; margin:auto; padding:1.5rem; display:grid; grid-template-columns:minmax(16rem,1fr) minmax(0,2fr); gap:1rem; align-items:start; }
+    section { background:var(--panel); border:1px solid var(--border); border-radius:0.5rem; padding:1rem; min-width:0; }
+    label { display:flex; flex-direction:column; gap:0.25rem; margin-bottom:0.75rem; color:var(--muted); }
+    input,select,textarea,button { font:inherit; border-radius:0.25rem; border:1px solid var(--border); color:var(--text); padding:0.5rem 0.75rem; min-width:0; }
+    input,select,textarea { background:var(--bg); width:100%; } textarea { font-family:var(--mono); resize:vertical; min-height:5rem; }
+    button { background:var(--panel); cursor:pointer; } button:hover { border-color:var(--accent); }
+    button.primary { background:var(--accent); border-color:var(--accent); color:white; } button.danger { color:var(--danger); }
+    button:disabled { opacity:0.5; cursor:wait; } :focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+    .row { display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center; } .row > label { flex:1 1 10rem; }
+    .notice { color:var(--muted); border-left:2px solid var(--accent); padding-left:0.75rem; margin-bottom:1rem; }
+    .status { min-height:1.5rem; overflow-wrap:anywhere; margin:0.75rem 0; } .error { color:var(--danger); } .success { color:var(--ok); }
+    .response { grid-column:2; } pre { white-space:pre-wrap; overflow-wrap:anywhere; background:var(--bg); border:1px solid var(--border); padding:1rem; border-radius:0.25rem; max-height:40rem; overflow:auto; font:0.8rem/1.6 var(--mono); }
+    .metrics { display:flex; flex-wrap:wrap; gap:0.5rem 1.5rem; color:var(--muted); margin:0.75rem 0; }
+    [hidden] { display:none !important; }
+    @media(max-width:800px) { main { grid-template-columns:minmax(0,1fr); padding:0.75rem; } .response { grid-column:1; } header { padding:1rem; } }
+    @media(prefers-reduced-motion:reduce) { * { scroll-behavior:auto; } }
+  </style>
+</head>
+<body>
+  <header><div><h1>Rust API Playground</h1><small>OpenAI 兼容接口 · 非流式调试</small></div><a href="/__admin">返回代理管理台 →</a></header>
+  <main>
+    <section aria-labelledby="provider-heading">
+      <h2 id="provider-heading">供应商配置</h2>
+      <p class="notice">API Key 仅从服务端环境变量读取。这里填写变量名称，不填写密钥。配置保存在服务端，调用内容暂不保存。</p>
+      <label>选择配置<select id="provider-edit"><option value="">新建供应商</option></select></label>
+      <form id="provider-form">
+        <label>供应商 ID<input id="provider-id" required pattern="[A-Za-z0-9_-]{1,64}" maxlength="64" placeholder="my-provider"></label>
+        <label>显示名称<input id="provider-name" required maxlength="200" placeholder="我的兼容接口"></label>
+        <label>Base URL<input id="provider-url" type="url" required placeholder="https://example.com/v1" aria-describedby="url-help"></label>
+        <small id="url-help">填写 API 基址，系统追加 /chat/completions。本机服务可使用 HTTP。</small>
+        <label>模型名称（每行一个）<textarea id="provider-models" required placeholder="model-a"></textarea></label>
+        <label>密钥环境变量（可选）<input id="provider-key" pattern="RUST_API_KEY_[A-Z0-9_]+" placeholder="RUST_API_KEY_MY_PROVIDER" autocomplete="off" aria-describedby="key-help"></label>
+        <small id="key-help">在启动服务的终端设置变量后再启动。留空表示不发送 Authorization，适合本机无鉴权服务。</small>
+        <label>超时（秒）<input id="provider-timeout" type="number" required min="1" max="300" value="60"></label>
+        <div class="row"><button class="primary" id="save-provider">保存供应商</button><button type="button" class="danger" id="delete-provider" hidden>删除</button></div>
+      </form>
+      <p id="provider-status" class="status" role="status" aria-live="polite">正在加载供应商…</p>
+    </section>
+    <section aria-labelledby="request-heading">
+      <h2 id="request-heading">模型请求</h2>
+      <form id="chat-form">
+        <div class="row"><label>供应商<select id="chat-provider" required></select></label><label>模型<select id="chat-model" required></select></label></div>
+        <label>System Prompt（可选）<textarea id="system-prompt" placeholder="说明模型的角色与回答方式"></textarea></label>
+        <label>User Prompt<textarea id="user-prompt" required rows="5" placeholder="输入你要调试的请求"></textarea></label>
+        <label>请求参数（JSON 对象）<textarea id="parameters" spellcheck="false" rows="4">{}</textarea></label>
+        <p class="muted">可填写 temperature、top_p、max_completion_tokens 等供应商支持的参数。模型相关限制由供应商返回，不自动重试。</p>
+        <button class="primary" id="send-chat" disabled>发送请求</button>
+        <small>每次发送可能产生供应商调用费用。</small>
+      </form>
+      <p id="chat-status" class="status" role="status" aria-live="polite">先保存一个供应商，再开始调试。</p>
+    </section>
+    <section class="response" aria-labelledby="response-heading">
+      <div class="row"><h2 id="response-heading">调用结果</h2><button type="button" id="copy-response" disabled>复制 JSON</button></div>
+      <div class="metrics" id="metrics"></div>
+      <pre id="answer" hidden tabindex="0" aria-label="模型回答"></pre>
+      <pre id="response" tabindex="0" aria-label="完整调用结果">发送请求后，这里会显示状态码、耗时、上游响应及错误详情。</pre>
+    </section>
+  </main>
+  <script type="module">
+    const $ = id => document.getElementById(id);
+    const API = '/__admin/api';
+    let providers = [], busy = false, resultText = '';
+    function status(id, text, kind = '') { $(id).textContent = text; $(id).className = `status ${kind}`; }
+    async function api(path, method = 'GET', body) {
+      const res = await fetch(API + path, { method, headers: body === undefined ? {} : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+      const text = await res.text();
+      let data;
+      try { data = text ? JSON.parse(text) : null; } catch { throw new Error(`HTTP ${res.status}：${text.slice(0, 300)}`); }
+      return { res, data };
+    }
+    function errorText(res, data) { return typeof data?.error === 'string' ? data.error : data?.error?.message || `HTTP ${res.status}`; }
+    function option(value, text) { const el = document.createElement('option'); el.value = value; el.textContent = text; return el; }
+    function selectModels() {
+      const p = providers.find(p => p.id === $('chat-provider').value);
+      $('chat-model').replaceChildren(...(p?.models || []).map(m => option(m, m)));
+      $('send-chat').disabled = !p || busy;
+    }
+    function editProvider() {
+      const p = providers.find(p => p.id === $('provider-edit').value);
+      $('provider-id').value = p?.id || ''; $('provider-id').readOnly = !!p;
+      $('provider-name').value = p?.name || ''; $('provider-url').value = p?.base_url || '';
+      $('provider-models').value = p?.models.join('\n') || ''; $('provider-key').value = p?.api_key_env || '';
+      $('provider-timeout').value = p?.timeout_seconds || 60; $('delete-provider').hidden = !p;
+    }
+    async function loadProviders(selected = $('provider-edit').value) {
+      const { res, data } = await api('/providers');
+      if (!res.ok) throw new Error(errorText(res, data));
+      providers = data.providers;
+      const chatSelection = $('chat-provider').value;
+      $('provider-edit').replaceChildren(option('', '新建供应商'), ...providers.map(p => option(p.id, p.name)));
+      $('provider-edit').value = providers.some(p => p.id === selected) ? selected : '';
+      $('chat-provider').replaceChildren(...providers.map(p => option(p.id, p.name)));
+      if (providers.some(p => p.id === chatSelection)) $('chat-provider').value = chatSelection;
+      selectModels(); editProvider();
+      if (!providers.length) status('chat-status', '先保存一个供应商，再开始调试。');
+      else if (!busy) status('chat-status', '准备就绪。请求通过服务端发送，密钥不会传入浏览器。');
+    }
+    $('provider-edit').addEventListener('change', editProvider);
+    $('chat-provider').addEventListener('change', selectModels);
+    $('provider-form').addEventListener('submit', async e => {
+      e.preventDefault(); $('save-provider').disabled = true;
+      status('provider-status', '正在保存…');
+      const editing = !!$('provider-edit').value;
+      const body = { id: $('provider-id').value, name: $('provider-name').value, base_url: $('provider-url').value, protocol: 'openai_compatible', models: $('provider-models').value.split('\n').map(s => s.trim()).filter(Boolean), api_key_env: $('provider-key').value.trim() || null, timeout_seconds: Number($('provider-timeout').value) };
+      try {
+        const { res, data } = await api(editing ? `/providers/${encodeURIComponent(body.id)}` : '/providers', editing ? 'PUT' : 'POST', body);
+        if (!res.ok) throw new Error(errorText(res, data));
+        await loadProviders(body.id); status('provider-status', '配置已保存。密钥是否可用将在发送请求时检查。', 'success');
+      } catch (err) { status('provider-status', err.message, 'error'); }
+      finally { $('save-provider').disabled = false; }
+    });
+    $('delete-provider').addEventListener('click', async () => {
+      if (!confirm('删除该供应商配置？')) return;
+      $('delete-provider').disabled = true;
+      try {
+        const { res, data } = await api(`/providers/${encodeURIComponent($('provider-edit').value)}`, 'DELETE');
+        if (!res.ok) throw new Error(errorText(res, data));
+        await loadProviders(''); status('provider-status', '供应商已删除。', 'success');
+      } catch (err) { status('provider-status', err.message, 'error'); }
+      finally { $('delete-provider').disabled = false; }
+    });
+    $('chat-form').addEventListener('submit', async e => {
+      e.preventDefault(); if (busy) return;
+      let parameters;
+      try { parameters = JSON.parse($('parameters').value); if (!parameters || Array.isArray(parameters) || typeof parameters !== 'object') throw new Error(); }
+      catch { status('chat-status', '请求参数必须是有效的 JSON 对象。', 'error'); return; }
+      const messages = [];
+      if ($('system-prompt').value.trim()) messages.push({ role:'system', content:$('system-prompt').value });
+      messages.push({ role:'user', content:$('user-prompt').value });
+      busy = true; selectModels(); $('chat-form').setAttribute('aria-busy', 'true');
+      status('chat-status', '正在等待上游响应…'); $('answer').hidden = true; $('metrics').textContent = '';
+      $('response').textContent = '请求中…'; $('copy-response').disabled = true;
+      try {
+        const { res, data } = await api('/playground/chat', 'POST', { provider_id:$('chat-provider').value, model:$('chat-model').value, messages, parameters });
+        resultText = JSON.stringify(data, null, 2); $('response').textContent = resultText; $('copy-response').disabled = false;
+        const metrics = [`上游 HTTP：${data.http_status ?? '未收到响应'}`, `总耗时：${data.duration_ms ?? '—'} ms`];
+        if (data.usage) for (const [key, label] of [['prompt_tokens','输入 Token'],['completion_tokens','输出 Token'],['total_tokens','总 Token']]) if (Number.isInteger(data.usage[key])) metrics.push(`${label}：${data.usage[key]}`);
+        $('metrics').textContent = metrics.join(' · ');
+        const content = data.response?.choices?.[0]?.message?.content;
+        if (typeof content === 'string') { $('answer').textContent = content; $('answer').hidden = false; }
+        status('chat-status', data.ok ? '调用成功。' : `${data.error?.kind || 'request'}：${errorText(res, data)}`, data.ok ? 'success' : 'error');
+      } catch (err) { status('chat-status', err.message, 'error'); $('response').textContent = '请求失败，未收到可解析的结果。'; }
+      finally { busy = false; selectModels(); $('chat-form').removeAttribute('aria-busy'); }
+    });
+    $('copy-response').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(resultText); status('chat-status', '调用结果已复制。'); }
+      catch { status('chat-status', '无法访问剪贴板，请选中 JSON 手动复制。', 'error'); }
+    });
+    loadProviders().then(() => status('provider-status', providers.length ? `已加载 ${providers.length} 个供应商。` : '暂无供应商，请添加配置。')).catch(err => status('provider-status', err.message, 'error'));
+  </script>
+</body>
+</html>
